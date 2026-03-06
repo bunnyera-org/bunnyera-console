@@ -1,166 +1,81 @@
-'use client';
 
-import { useEffect, useState } from 'react';
-import { Card, CardContent } from '@/components/common/Card';
-import { Badge } from '@/components/common/Badge';
-import { bunnyClient } from '@/lib/websocket/client';
-import { Task } from '@/lib/types';
-import { Play, RotateCw, XCircle } from 'lucide-react';
-import { clsx } from 'clsx';
+'use client'
+
+import { useEffect, useState, useCallback } from 'react'
+import { getTasks } from '@/lib/api/tasks'
+import TaskRow from '@/components/tasks/TaskRow'
 
 export default function TasksPage() {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [filter, setFilter] = useState<'all' | 'running' | 'completed' | 'failed'>('all');
-  const [loading, setLoading] = useState(false);
+  const [tasks, setTasks] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const load = useCallback(async () => {
+    try {
+      const res = await getTasks()
+      setTasks(res.tasks || [])
+    } catch (error) {
+      console.error('Failed to load tasks', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
-    bunnyClient.connect();
-    const unsub = bunnyClient.subscribeToTasks((task) => {
-      setTasks(prev => {
-        // Update existing or add new
-        const index = prev.findIndex(t => t.id === task.id);
-        if (index >= 0) {
-          const newTasks = [...prev];
-          newTasks[index] = task;
-          return newTasks;
-        }
-        return [task, ...prev];
-      });
-    });
-    return unsub;
-  }, []);
-
-  const handleTriggerTask = async () => {
-    setLoading(true);
-    try {
-      await fetch('/api/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          type: 'demo-task',
-          params: { timestamp: Date.now() }
-        }),
-      });
-    } catch (error) {
-      console.error('Failed to trigger task', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRetry = async (id: string) => {
-    try {
-      await fetch(`/api/tasks/${id}/retry`, { method: 'POST' });
-    } catch (error) {
-      console.error(`Failed to retry task ${id}`, error);
-    }
-  };
-
-  const handleCancel = async (id: string) => {
-    try {
-      await fetch(`/api/tasks/${id}/cancel`, { method: 'POST' });
-    } catch (error) {
-      console.error(`Failed to cancel task ${id}`, error);
-    }
-  };
-
-  const filteredTasks = tasks.filter(t => filter === 'all' || t.status === filter);
+    load()
+    // 简单的轮询机制，每10秒刷新一次任务列表
+    const interval = setInterval(load, 10000)
+    return () => clearInterval(interval)
+  }, [load])
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-bold tracking-tight">Tasks</h2>
+    <div className='space-y-6'>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className='text-3xl font-bold text-bunny-accent'>Tasks</h1>
+          <p className='text-gray-400'>任务管理 · BunnyEra Cloud</p>
+        </div>
         <button 
-          onClick={handleTriggerTask}
-          disabled={loading}
-          className="bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md text-sm font-medium flex items-center gap-2 transition-colors disabled:opacity-50"
+          onClick={load}
+          className="px-4 py-2 bg-bunny-card border border-gray-700 hover:border-bunny-accent text-sm rounded-md transition-colors"
         >
-          <Play className="w-4 h-4" />
-          {loading ? 'Triggering...' : 'Trigger Task'}
+          刷新列表
         </button>
       </div>
 
-      <div className="flex gap-2 pb-4">
-        {(['all', 'running', 'completed', 'failed'] as const).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={clsx(
-              'px-3 py-1 rounded-full text-xs font-medium border capitalize transition-colors',
-              filter === f 
-                ? 'bg-primary text-primary-foreground border-primary' 
-                : 'bg-background text-muted-foreground border-border hover:bg-accent'
-            )}
-          >
-            {f}
-          </button>
-        ))}
-      </div>
-
-      <Card>
-        <CardContent className="p-0">
-          <div className="w-full overflow-auto">
-            <table className="w-full text-sm text-left">
-              <thead className="text-xs text-muted-foreground uppercase bg-muted/50 border-b border-border">
+      <div className='bg-bunny-card border border-gray-800 rounded-lg overflow-hidden'>
+        <div className="overflow-x-auto">
+          <table className='w-full text-left'>
+            <thead className='bg-gray-900/50 border-b border-gray-700 text-gray-400 text-sm uppercase tracking-wider'>
+              <tr>
+                <th className='p-4 font-medium'>任务 ID</th>
+                <th className='p-4 font-medium'>状态</th>
+                <th className='p-4 font-medium'>来源</th>
+                <th className='p-4 font-medium'>时间</th>
+                <th className='p-4 font-medium'>操作</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-800">
+              {loading && tasks.length === 0 ? (
                 <tr>
-                  <th className="px-6 py-3">Task ID</th>
-                  <th className="px-6 py-3">Name</th>
-                  <th className="px-6 py-3">Status</th>
-                  <th className="px-6 py-3">Source</th>
-                  <th className="px-6 py-3">Triggered At</th>
-                  <th className="px-6 py-3">Actions</th>
+                  <td colSpan={5} className="p-8 text-center text-gray-500">
+                    加载中...
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {filteredTasks.map((task) => (
-                  <tr key={task.id} className="bg-card border-b border-border hover:bg-muted/50 transition-colors">
-                    <td className="px-6 py-4 font-mono text-xs">{task.id}</td>
-                    <td className="px-6 py-4 font-medium">{task.name}</td>
-                    <td className="px-6 py-4">
-                      <Badge variant={
-                        task.status === 'running' ? 'default' : 
-                        task.status === 'completed' ? 'success' : 
-                        task.status === 'failed' ? 'error' : 'warning'
-                      }>
-                        {task.status}
-                      </Badge>
-                    </td>
-                    <td className="px-6 py-4 text-muted-foreground">{task.source}</td>
-                    <td className="px-6 py-4 text-muted-foreground">
-                      {new Date(task.triggerTime).toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex gap-2">
-                        <button 
-                          onClick={() => handleRetry(task.id)}
-                          className="text-muted-foreground hover:text-primary transition-colors" 
-                          title="Retry"
-                        >
-                          <RotateCw className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={() => handleCancel(task.id)}
-                          className="text-muted-foreground hover:text-destructive transition-colors" 
-                          title="Cancel"
-                        >
-                          <XCircle className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {filteredTasks.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">
-                      No tasks found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+              ) : tasks.length > 0 ? (
+                tasks.map((task, i) => (
+                  <TaskRow key={task.id || i} task={task} reload={load} />
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="p-8 text-center text-gray-500">
+                    暂无任务记录
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
-  );
+  )
 }

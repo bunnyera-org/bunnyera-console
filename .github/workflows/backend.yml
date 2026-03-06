@@ -1,0 +1,30 @@
+
+# ============================================ 
+#  BunnyEra Cloud Backend — CI/CD 
+#  Brand: BUNNYERA LLC 
+#  IP: BunBun 🐰 × Mr.Bear 🐻 
+#  Status: Brand Verified ⭐ 
+# ============================================ 
+
+name: BunnyEra Cloud Backend CI/CD 
+
+on: 
+  push: 
+    branches: ['main'] 
+  pull_request: 
+
+jobs: 
+  deploy: 
+    runs-on: ubuntu-latest 
+
+    steps: 
+      - name: 🐰 Checkout Repository 
+        uses: actions/checkout@v4 
+
+      - name: 🐻 Install Railway CLI 
+        run: npm i -g @railway/cli 
+
+      - name: 🚀 Deploy to Railway 
+        run: railway up --service=bunnyera-backend --ci 
+        env: 
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }} 
